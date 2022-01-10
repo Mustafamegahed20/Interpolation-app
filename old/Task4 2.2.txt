@@ -1,0 +1,115 @@
+from PyQt5 import QtWidgets, uic
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QFileDialog, QGraphicsView
+import sys
+from PyQt5.uic.properties import QtCore
+from PyQt5.QtCore import pyqtSignal
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import signal
+import os
+import pandas as pd 
+import more_itertools as mit 
+import mplwidget
+
+
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self):   
+        super(MainWindow, self).__init__()
+        uic.loadUi('Gui.ui', self)
+        self.upload.clicked.connect(self.open)
+        self.display.clicked.connect(self.chunk)
+        self.slider.valueChanged.connect(self.chunk)
+        
+        self.errorMap.clicked.connect(self.error_map)
+        
+        self.MplWidget.canvas.axes.set_facecolor('black')
+        self.MplWidget2.canvas.axes.set_facecolor('black')
+        self.show()
+        
+    def open(self):
+        global data0
+        path = QFileDialog.getOpenFileName(self, 'Open a file', '')
+        if path != ('', ''):
+            data0 = path[0]     
+            #logging.info("The user open an audio file path: " + data)
+            print(data0)
+            
+    def chunk(self):
+        global data0        
+        global chunks,degree,x,y,model,x_chunks,y_chunks    
+        
+        data = pd.read_csv(data0)
+        x = data['# t']
+        y = data['x']
+            
+        degree = self.slider.value()
+    
+        chunks = int(self.spinBox1.value())
+        n=int((len(x)-1)/chunks)
+        percentage=int(self.spinBox2.value())
+        if(percentage>=0 and percentage<=25):
+            k=int((percentage/100)*((len(x)-1)/chunks))
+            x_chunks = list(mit.windowed(x, n=int(len(x)/chunks), step=n-k))
+            y_chunks = list(mit.windowed(y, n=int(len(x)/chunks), step=n-k))
+            self.MplWidget.canvas.axes.clear()
+            
+        
+        #self.MplWidget.canvas.axes.plot(x, y,'--')
+        for i in range(chunks):
+            self.MplWidget.canvas.axes.tick_params(axis="x", colors="white")
+            self.MplWidget.canvas.axes.tick_params(axis="y", colors="white")
+            self.MplWidget.canvas.axes.plot(x_chunks[i], y_chunks[i],'--')
+            
+            model = np.poly1d(np.polyfit(x_chunks[i], y_chunks[i], degree))
+            self.MplWidget.canvas.axes.plot(x_chunks[i], model(x_chunks[i]), '-.')
+            
+            self.MplWidget.canvas.draw()
+        #self.MplWidget.canvas.axes.set_title(str(model).strip(), color='r')
+        self.MplWidget.canvas.draw()
+        #print(str(model).strip())
+        
+######################################### Error Map ##################################
+  
+    
+    def error_map(self):
+        global chunks,degree,x,y,model,x_chunks,y_chunks
+        
+        def percentage_error(actual, predicted):
+            res = np.empty(actual.shape)
+            for j in range(actual.shape[0]):
+                if actual[j] != 0:
+                    res[j] = (actual[j] - predicted[j]) / actual[j]
+                else:
+                    res[j] = predicted[j] / np.mean(actual)
+            return res
+        def mean_absolute_percentage_error(y_true, y_pred): 
+            return np.mean(np.abs(percentage_error(np.asarray(y_true), np.asarray(y_pred)))) * 100
+        
+        a=range(1,chunks+1)
+        b=range(1,degree+1)
+        xa, xb = np.meshgrid(a, b, sparse=True)  
+
+        print("Overall Error: ")
+        print(mean_absolute_percentage_error(y, model(x)))
+        errors=[]
+        for i in range(1,degree+1):
+            degrees = np.poly1d(np.polyfit(x, y, i))
+            for j in range(chunks):
+                errors.append(mean_absolute_percentage_error(y_chunks[j],degrees(x_chunks[j])))
+        print(errors)    
+        errors_2d = np.reshape(errors, (degree, chunks))
+        print(errors_2d)  
+        
+        self.MplWidget2.canvas.axes.clear()
+        self.MplWidget2.canvas.axes.tick_params(axis="x", colors="white")
+        self.MplWidget2.canvas.axes.tick_params(axis="y", colors="white")
+        self.MplWidget2.canvas.axes.contourf(a,b,errors_2d)
+        #self.MplWidget2.canvas.axes.plot.colorbar()         
+        self.MplWidget2.canvas.draw()
+        
+app = 0
+app = QtWidgets.QApplication(sys.argv)
+window = MainWindow()
+app.exec_()        
+        

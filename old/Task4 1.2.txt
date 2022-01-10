@@ -1,0 +1,83 @@
+from PyQt5 import QtWidgets, uic
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QFileDialog, QGraphicsView
+import sys
+from PyQt5.uic.properties import QtCore
+from PyQt5.QtCore import pyqtSignal
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import signal
+import os
+import pandas as pd 
+import more_itertools as mit 
+import mplwidget
+from scipy.interpolate import interp1d
+
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self):   
+        super(MainWindow, self).__init__()
+        uic.loadUi('Gui.ui', self)
+        self.upload.clicked.connect(self.open)
+        self.display.clicked.connect(self.chunk)
+        self.slider.valueChanged.connect(self.chunk)
+        self.MplWidget.canvas.axes.set_facecolor('black')
+        self.show()
+        
+    def open(self):
+        global data0
+        path = QFileDialog.getOpenFileName(self, 'Open a file', '')
+        if path != ('', ''):
+            data0 = path[0]     
+            #logging.info("The user open an audio file path: " + data)
+            print(data0)
+            
+    def chunk(self):
+        global data0
+        data = pd.read_csv(data0)
+        #x = np.linspace(0, 10, num=10, endpoint=True)
+        x = data['# t']
+        y = data['x']
+            
+        f = interp1d(x, y)
+        f2 = interp1d(x, y, kind='cubic')
+        f3 = interp1d(x, y, kind='quadratic')
+        f4 = interp1d(x, y, kind='nearest')
+        xnew = np.linspace(x[0], x[len(x)-1], num=self.slider.value() , endpoint=True)
+        
+        chunks = int(self.spinBox1.value())
+        n=int((len(x)-1)/chunks)
+        percentage=int(self.spinBox2.value())
+        if(percentage>=0 and percentage<=25):
+            k=int((percentage/100)*((len(x)-1)/chunks))
+            x_chunks = list(mit.windowed(x, n=int(len(x)/chunks), step=n-k))
+            y_chunks = list(mit.windowed(y, n=int(len(x)/chunks), step=n-k))
+            self.MplWidget.canvas.axes.clear()
+            
+        for i in range(chunks):
+            self.MplWidget.canvas.axes.tick_params(axis="x", colors="white")
+            self.MplWidget.canvas.axes.tick_params(axis="y", colors="white")
+            self.MplWidget.canvas.axes.plot(x_chunks[i], y_chunks[i])
+        
+        if(self.comboBox.currentIndex()==1):
+            self.MplWidget.canvas.axes.plot(xnew, f(xnew),'o')
+            self.MplWidget.canvas.axes.set_title('First Degree',color='r', fontsize = 20)
+            self.MplWidget.canvas.draw() 
+        if(self.comboBox.currentIndex()==2):
+            self.MplWidget.canvas.axes.plot(xnew, f2(xnew),'o')
+            self.MplWidget.canvas.axes.set_title('Second Degree',color='r', fontsize = 20)
+            self.MplWidget.canvas.draw()       
+        if(self.comboBox.currentIndex()==3):
+            self.MplWidget.canvas.axes.plot(xnew, f3(xnew),'o')
+            self.MplWidget.canvas.axes.set_title('Third Degree',color='r', fontsize = 20)
+            self.MplWidget.canvas.draw()        
+        if(self.comboBox.currentIndex()==4):
+            self.MplWidget.canvas.axes.plot(xnew, f4(xnew),'o')
+            self.MplWidget.canvas.axes.set_title('Nearest Neighbour',color='r', fontsize = 20)
+            self.MplWidget.canvas.draw() 
+            
+
+app = 0
+app = QtWidgets.QApplication(sys.argv)
+window = MainWindow()
+app.exec_()        
+        

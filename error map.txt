@@ -1,0 +1,70 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import more_itertools as mit 
+
+plt.rcParams["figure.figsize"] = [20, 20]
+plt.rcParams["figure.autolayout"] = True
+%matplotlib inline
+import mpld3
+mpld3.enable_notebook()
+
+data = pd.read_csv("ecgnormal.csv")
+x = data['# t']
+y = data['x']
+
+chunks = 3
+n=int((len(x)-1)/chunks)
+percentage= 0
+if(percentage>=0 and percentage<=25):
+    k=int((percentage/100)*((len(x)-1)/chunks))
+    x_chunks = list(mit.windowed(x, n=int(len(x)/chunks), step=n-k))
+    y_chunks = list(mit.windowed(y, n=int(len(x)/chunks), step=n-k)) 
+
+degree = 3
+model = np.poly1d(np.polyfit(x, y, degree))
+
+for i in range(chunks):
+    plt.plot(x_chunks[i], y_chunks[i],'--')  
+    plt.plot(x_chunks[i], model(x_chunks[i]), '-.')
+#print(str(model).strip())
+plt.show()
+
+######################################### Error Map ##################################
+def percentage_error(actual, predicted):
+    res = np.empty(actual.shape)
+    for j in range(actual.shape[0]):
+        if actual[j] != 0:
+            res[j] = (actual[j] - predicted[j]) / actual[j]
+        else:
+            res[j] = predicted[j] / np.mean(actual)
+    return res
+def mean_absolute_percentage_error(y_true, y_pred): 
+    return np.mean(np.abs(percentage_error(np.asarray(y_true), np.asarray(y_pred)))) * 100
+
+a=range(1,chunks+1)
+b=range(1,degree+1)
+xa, xb = np.meshgrid(a, b, sparse=True)  
+
+print("Overall Error: ")
+print(mean_absolute_percentage_error(y, model(x)))
+print("Error from chunk 1 and current degree: ")
+print(mean_absolute_percentage_error(y_chunks[0], model(x_chunks[0])))
+print("Error from chunk 2 and current degree: ")
+print(mean_absolute_percentage_error(y_chunks[1], model(x_chunks[1])))
+print("Error from chunk 3 and current degree: ")
+print(mean_absolute_percentage_error(y_chunks[2], model(x_chunks[2])))
+
+errors=[]
+for i in range(1,degree+1):
+    degrees = np.poly1d(np.polyfit(x, y, i))
+    for j in range(chunks):
+        errors.append(mean_absolute_percentage_error(y_chunks[j],degrees(x_chunks[j])))
+print(errors)    
+errors_2d = np.reshape(errors, (degree, chunks))
+print(errors_2d)  
+
+    
+plt.contourf(a,b,errors_2d)
+plt.colorbar()  
+plt.show()
